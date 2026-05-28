@@ -168,9 +168,14 @@ class ConversationOrchestrator:
             tasks = await self.tasks.list_all()
 
         self.session.track_tasks([t.id for t in tasks])
-        if action.response_text:
-            return action.response_text
-        return _format_tasks_conversational(tasks)
+        formatted = _format_tasks_conversational(tasks)
+        if not tasks:
+            return action.response_text or formatted
+        # Always include the actual task list in voice responses (LLM intro alone is often incomplete)
+        intro = (action.response_text or "").strip()
+        if intro and intro not in formatted:
+            return f"{intro.rstrip('.')}. {formatted}"
+        return formatted
 
     async def _handle_update(self, action: AgentAction) -> str:
         task_id = await self._resolve_task_id(action)

@@ -33,7 +33,7 @@ export function VoiceAssistant() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen max-w-lg mx-auto px-4 py-6">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] max-w-lg mx-auto px-4 py-6 overflow-hidden">
       <header className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-white tracking-tight">
@@ -44,8 +44,8 @@ export function VoiceAssistant() {
         <ConnectionStatusBadge status={connectionStatus} />
       </header>
 
-      <main className="flex-1 flex flex-col gap-6 min-h-0">
-        <div className="flex flex-col items-center gap-3 py-4">
+      <main className="flex-1 flex flex-col gap-4 min-h-0 overflow-hidden">
+        <div className="flex flex-col items-center gap-2 py-2 shrink-0">
           <SpeakingAnimation status={assistantStatus} />
           <p className="text-sm font-medium text-gray-400">
             {statusLabels[assistantStatus]}
@@ -60,7 +60,7 @@ export function VoiceAssistant() {
           supported={speechSupported}
         />
 
-        <div className="flex-1 min-h-[240px] max-h-[400px] rounded-2xl border border-surface-border bg-surface-elevated/50 p-4 backdrop-blur-sm">
+        <div className="flex flex-col flex-1 min-h-0 rounded-2xl border border-surface-border bg-surface-elevated/50 p-3 backdrop-blur-sm overflow-hidden">
           <ConversationHistory messages={messages} />
         </div>
 
@@ -71,7 +71,7 @@ export function VoiceAssistant() {
         )}
       </main>
 
-      <footer className="flex flex-col items-center gap-4 pt-6 pb-4">
+      <footer className="flex flex-col items-center gap-3 pt-4 pb-2 shrink-0">
         <MicrophoneButton
           isListening={isListening}
           disabled={connectionStatus !== "connected" || assistantStatus === "processing"}

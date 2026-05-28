@@ -46,8 +46,10 @@ export function useVoiceWebSocket() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const ttsChunksRef = useRef<Uint8Array[]>([]);
+  const activeTtsChunksRef = useRef<Uint8Array[]>([]);
+  const ttsPlaybackQueueRef = useRef<Uint8Array[][]>([]);
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isPlayingTtsRef = useRef(false);
   const isSpeakingRef = useRef(false);
   const recordMimeRef = useRef("audio/webm");
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,31 +76,55 @@ export function useVoiceWebSocket() {
       ttsAudioRef.current.src = "";
       ttsAudioRef.current = null;
     }
-    ttsChunksRef.current = [];
+    activeTtsChunksRef.current = [];
+    ttsPlaybackQueueRef.current = [];
+    isPlayingTtsRef.current = false;
     isSpeakingRef.current = false;
   }, []);
 
-  const playTtsAudio = useCallback(async () => {
-    if (ttsChunksRef.current.length === 0) return;
-    const blob = new Blob(ttsChunksRef.current as BlobPart[], { type: "audio/mpeg" });
-    ttsChunksRef.current = [];
+  const playNextInQueue = useCallback(async () => {
+    if (isPlayingTtsRef.current) return;
+    const next = ttsPlaybackQueueRef.current.shift();
+    if (!next || next.length === 0) {
+      isSpeakingRef.current = false;
+      setAssistantStatus("listening");
+      return;
+    }
+
+    isPlayingTtsRef.current = true;
+    isSpeakingRef.current = true;
+    setAssistantStatus("speaking");
+
+    const blob = new Blob(next as BlobPart[], { type: "audio/mpeg" });
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     ttsAudioRef.current = audio;
+
     try {
       await audio.play();
     } catch (e) {
       console.warn("TTS playback failed:", e);
       URL.revokeObjectURL(url);
+      isPlayingTtsRef.current = false;
+      void playNextInQueue();
       return;
     }
+
     audio.onended = () => {
       URL.revokeObjectURL(url);
       if (ttsAudioRef.current === audio) ttsAudioRef.current = null;
-      isSpeakingRef.current = false;
-      setAssistantStatus("listening");
+      isPlayingTtsRef.current = false;
+      void playNextInQueue();
     };
   }, []);
+
+  const enqueueTtsPlayback = useCallback(() => {
+    if (activeTtsChunksRef.current.length > 0) {
+      ttsPlaybackQueueRef.current.push([...activeTtsChunksRef.current]);
+      activeTtsChunksRef.current = [];
+    }
+    void playNextInQueue();
+  }, [playNextInQueue]);
 
   const stopSpeechRecognition = useCallback(() => {
     const recognition = speechRecognitionRef.current;
@@ -152,7 +178,7 @@ export function useVoiceWebSocket() {
           }
           break;
         case "tts_start":
-          ttsChunksRef.current = [];
+          activeTtsChunksRef.current = [];
           setAssistantStatus("speaking");
           isSpeakingRef.current = true;
           break;
@@ -161,15 +187,11 @@ export function useVoiceWebSocket() {
             const binary = atob(data.data);
             const bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-            ttsChunksRef.current.push(bytes);
+            activeTtsChunksRef.current.push(bytes);
           }
           break;
         case "tts_end":
-          await playTtsAudio();
-          if (!ttsAudioRef.current) {
-            isSpeakingRef.current = false;
-            setAssistantStatus("listening");
-          }
+          enqueueTtsPlayback();
           break;
         case "tts_cancelled":
           stopPlayback();
@@ -185,7 +207,7 @@ export function useVoiceWebSocket() {
           break;
       }
     },
-    [addMessage, playTtsAudio, stopPlayback, stopSpeechRecognition]
+    [addMessage, enqueueTtsPlayback, stopPlayback, stopSpeechRecognition]
   );
 
   const connect = useCallback(() => {
